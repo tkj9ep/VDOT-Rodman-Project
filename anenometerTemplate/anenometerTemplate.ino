@@ -1,4 +1,9 @@
 #include <SD.h>
+#include <SPI.h>
+#include <chrono>
+#include <ctime>
+#define W5200_CS  10
+#define SDCARD_CS 4
 
 const int sensorPin = A0; //Defines the pin that the anemometer output is connected to
 int CS = 4;
@@ -10,48 +15,45 @@ float windSpeed = 0; // Wind speed in meters per second (m/s)
 float voltageConversionConstant = .004882814; //This constant maps the value provided from the analog read function, which ranges from 0 to 1023, to actual voltage, which ranges from 0V to 5V
 int sensorDelay = 1000; //Delay between sensor readings, measured in milliseconds (ms)
  
-//Anemometer Technical Variables
-//The following variables correspond to the anemometer sold by Adafruit, but could be modified to fit other anemometers.
  
 float voltageMin = .43; // Mininum output voltage from anemometer in mV.
 float windSpeedMin = 0; // Wind speed in meters/sec corresponding to minimum voltage
-int timeX = 30000;
+int timeX = 5000;
 float voltageMax = 2.0; // Maximum output voltage from anemometer in mV.
 float windSpeedMax = 32; // Wind speed in meters/sec corresponding to maximum voltage
 float sum = 0.0;
 int count = 0;
 int countThreshold = timeX/sensorDelay;
-File file;
 
+File file;
 
 void setup() 
 {              
-  Serial.begin(9600);  //Start the serial connection
+ Serial.begin(9600);
+ Serial.print("Initializing SD card...");
+    
+    pinMode(W5200_CS, OUTPUT);
+    //disconnect the W5200
+    digitalWrite(W5200_CS, HIGH);
 
-  //SD initialization
-  pinMode(CS, OUTPUT);
+    pinMode(SDCARD_CS, OUTPUT);
+    if (!SD.begin(SDCARD_CS)) {
+        Serial.println("initialization failed!");
+        return;
+    }
+    Serial.println("initialization done.");
+    digitalWrite(SDCARD_CS, HIGH);
 
- if (!SD.begin(CS)) {
-    Serial.println("SD card not initialized");  
- }
 
- if(SD.exists("data.txt")) {
-  Serial.println("File exists.");
-
-  if(SD.remove("data.txt") == true) {
-    Serial.println("Removed File");
-  } else {
-    Serial.println("Unsuccessfully removed file");
-  }
-  }
  }
  
 void loop() {
 
 if(count >= countThreshold) {
-  //writeFile(sum/count);
+  float avg = sum/count;
   Serial.print("Average Speed is: \t");
-  Serial.println(sum/count);
+  Serial.println(avg);
+  writeToSD(avg, 0);
   count = 0;
   sum = 0;
 }
@@ -72,25 +74,35 @@ if (sensorVoltage <= voltageMin){
   Serial.print("\t"); 
   Serial.print("Wind speed: ");
   float mphSpeed = mphConversion(windSpeed);
+  //writeToSD(mphSpeed, 0);
   Serial.println(mphSpeed);
   sum += mphSpeed;
   
   count++;
   delay(sensorDelay);
-  writeFile(mphSpeed);
+
+
+  
+ // writeFile(mphSpeed);
   
 }
 
-void writeFile(float mphSpeed) {
- //write file
- file = SD.open("temp.txt", FILE_WRITE);
- if(file) {
-  file.println(mphSpeed);
-  file.close();
-  
- } else {
-  Serial.println("Failed");
- }
+
+void writeToSD(float mph, int timeValue) {
+    // open the file. note that only one file can be opened at one time.
+    file = SD.open("windData.txt", FILE_WRITE);
+    //write to the file after it's successfully opened or created:
+    if (file) {
+        file.print("Time:");
+        file.print(timeValue);
+        file.print("\t mph: ");
+        file.println(mph);
+        // close the fi
+        file.close();
+    } else {
+        //failed.
+        Serial.println("error opening test.txt");
+    }
 }
 
 void readFile() {
