@@ -1,7 +1,5 @@
 #include <SD.h>
 #include <SPI.h>
-#include <chrono>
-#include <ctime>
 #define W5200_CS  10
 #define SDCARD_CS 4
 
@@ -24,11 +22,13 @@ float windSpeedMax = 32; // Wind speed in meters/sec corresponding to maximum vo
 float sum = 0.0;
 int count = 0;
 int countThreshold = timeX/sensorDelay;
+int currentTime;
 
 File file;
 
 void setup() 
 {              
+ currentTime = 0;
  Serial.begin(9600);
  Serial.print("Initializing SD card...");
     
@@ -53,7 +53,7 @@ if(count >= countThreshold) {
   float avg = sum/count;
   Serial.print("Average Speed is: \t");
   Serial.println(avg);
-  writeToSD(avg, 0);
+  writeToSD(avg, currentTime);
   count = 0;
   sum = 0;
 }
@@ -80,8 +80,8 @@ if (sensorVoltage <= voltageMin){
   
   count++;
   delay(sensorDelay);
-
-
+  currentTime += 1;
+  writeToSD(mphSpeed);
   
  // writeFile(mphSpeed);
   
@@ -93,8 +93,32 @@ void writeToSD(float mph, int timeValue) {
     file = SD.open("windData.txt", FILE_WRITE);
     //write to the file after it's successfully opened or created:
     if (file) {
-        file.print("Time:");
+        file.print("Time: ");
+        int hours = (int)(timeValue/3600);
+        timeValue = timeValue % 3600;
+        int minutes = (int)(timeValue/60);
+        timeValue = (timeValue % 60);
+        file.print(hours);
+        file.print(":");
+        file.print(minutes);
+        file.print(":");
         file.print(timeValue);
+
+        file.print("\tAverage Time in mph: ");
+        file.println(mph);
+        // close the fi
+        file.close();
+    } else {
+        //failed.
+        Serial.println("error opening test.txt");
+    }
+}
+
+void writeToSD(float mph) {
+    // open the file. note that only one file can be opened at one time.
+    file = SD.open("windData.txt", FILE_WRITE);
+    //write to the file after it's successfully opened or created:
+    if (file) {
         file.print("\t mph: ");
         file.println(mph);
         // close the fi
