@@ -1,7 +1,10 @@
+#include <Wire.h>
+#include "RTClib.h"
 #include <SD.h>
 #include <SPI.h>
 #define W5200_CS  10
 #define SDCARD_CS 4
+RTC_DS1307 RTC;
 
 const int sensorPin = A0; //Defines the pin that the anemometer output is connected to
 int CS = 4;
@@ -30,20 +33,23 @@ void setup()
 {              
  currentTime = 0;
  Serial.begin(9600);
+    Wire.begin();
+    RTC.begin();
+  // Check to see if the RTC is keeping time.  If it is, load the time from your computer.
+  if (! RTC.isrunning()) {
+    Serial.println("RTC is NOT running!");
+    // This will reflect the time that your sketch was compiled
+    //RTC.adjust(DateTime(__DATE__, __TIME__));
+  }
  Serial.print("Initializing SD card...");
-    
     pinMode(W5200_CS, OUTPUT);
-    //disconnect the W5200
-    digitalWrite(W5200_CS, HIGH);
-
-    pinMode(SDCARD_CS, OUTPUT);
     if (!SD.begin(SDCARD_CS)) {
         Serial.println("initialization failed!");
         return;
     }
     Serial.println("initialization done.");
     digitalWrite(SDCARD_CS, HIGH);
-
+    writeToCSV();
 
  }
  
@@ -53,7 +59,7 @@ if(count >= countThreshold) {
   float avg = sum/count;
   Serial.print("Average Speed is: \t");
   Serial.println(avg);
-  writeToSD(avg, currentTime);
+  averageToSD(avg);
   count = 0;
   sum = 0;
 }
@@ -69,68 +75,99 @@ if (sensorVoltage <= voltageMin){
 }
  
  //Print voltage and windspeed to serial
-  Serial.print("Voltage: ");
+  printTime();
+  Serial.print("\tVoltage: ");
   Serial.print(sensorVoltage);
   Serial.print("\t"); 
   Serial.print("Wind speed: ");
   float mphSpeed = mphConversion(windSpeed);
-  //writeToSD(mphSpeed, 0);
   Serial.println(mphSpeed);
   sum += mphSpeed;
   
   count++;
   delay(sensorDelay);
   currentTime += 1;
-  writeToSD(mphSpeed);
-  
- // writeFile(mphSpeed);
   
 }
 
+void printTime() {
+    DateTime now = RTC.now();
+    Serial.print(now.month(), DEC);
+    Serial.print('/');
+    Serial.print(now.day(), DEC);
+    Serial.print('/');
+    Serial.print(now.year(), DEC);
+    Serial.print(' ');
+    if(now.hour()<10) Serial.print("0");
+    Serial.print(now.hour(), DEC);
+    Serial.print(':');
+    if(now.minute()<10) Serial.print("0");
+    Serial.print(now.minute(), DEC);
+    Serial.print(':');
+    if(now.second()<10) Serial.print("0");
+    Serial.print(now.second(), DEC);
+}
+void writeToCSV() {
+    file.println("Date,Time,Speed (MPH),");
+}
 
-void writeToSD(float mph, int timeValue) {
-    // open the file. note that only one file can be opened at one time.
-    file = SD.open("windData.txt", FILE_WRITE);
-    //write to the file after it's successfully opened or created:
+void printDateSD() {
+    DateTime now = RTC.now(); 
+    file.print(now.month(), DEC);
+    file.print('/');
+    file.print(now.day(), DEC);
+    file.print('/');
+    file.print(now.year(), DEC);
+    file.print(',');
+}
+
+void printTimeSD() {
+    DateTime now = RTC.now(); 
+    
+    if(now.hour()<10) file.print("0");
+    file.print(now.hour(), DEC);
+    file.print(':');
+    if(now.minute()<10) file.print("0");
+    file.print(now.minute(), DEC);
+    file.print(':');
+    if(now.second()<10) file.print("0");
+    file.print(now.second(), DEC);  
+    file.print(',');
+}
+
+void averageToSD(float mph) {
+    file = SD.open("windData.txt");
     if (file) {
-        file.print("Time: ");
-        int hours = (int)(timeValue/3600);
-        timeValue = timeValue % 3600;
-        int minutes = (int)(timeValue/60);
-        timeValue = (timeValue % 60);
-        file.print(hours);
-        file.print(":");
-        file.print(minutes);
-        file.print(":");
-        file.print(timeValue);
-
-        file.print("\tAverage Time in mph: ");
-        file.println(mph);
-        // close the fi
+     String string1 = file.readStringUntil('\n');
+        string1.trim();
+        if(!string1.equals("Date,Time,Speed (MPH),")){
+          SD.remove("windData.txt");
+          file.close();
+          file = SD.open("windData.txt", FILE_WRITE);
+          writeToCSV();
+        }
         file.close();
-    } else {
-        //failed.
-        Serial.println("error opening test.txt");
     }
+  
+    file = SD.open("windData.txt", FILE_WRITE);
+    if (file) {
+        printDateSD();
+        printTimeSD();
+        file.print(mph);
+        file.println(',');
+        file.close();
+    } else 
+        Serial.println("error opening test.txt");
 }
 
 void writeToSD(float mph) {
-    // open the file. note that only one file can be opened at one time.
     file = SD.open("windData.txt", FILE_WRITE);
-    //write to the file after it's successfully opened or created:
     if (file) {
-        file.print("\t mph: ");
+        file.print("MPH: ");
         file.println(mph);
-        // close the fi
         file.close();
-    } else {
-        //failed.
+    } else 
         Serial.println("error opening test.txt");
-    }
-}
-
-void readFile() {
-  
 }
 
 float mphConversion(float windSpeed) {
